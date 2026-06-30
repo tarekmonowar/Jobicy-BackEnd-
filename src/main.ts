@@ -1,43 +1,52 @@
+// Application entry — global middleware, pipes, filters, interceptors, and listen.
 import 'dotenv/config';
+import { LoggerService, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
+import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
-import { GlobalFilter } from './common/filter/global.filter';
+import { AppConfig } from '@/config/configuration';
+import {
+  createMorganMiddleware,
+  createWinstonLogger,
+} from '@/logger/winston.config';
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+async function bootstrap(): Promise<void> {
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
-  // URL prefix
-  app.setGlobalPrefix('api/v1');
+  const configService = app.get<ConfigService<AppConfig, true>>(ConfigService);
+  const winstonLogger = app.get<LoggerService>(WINSTON_MODULE_NEST_PROVIDER);
+  app.useLogger(winstonLogger);
 
-  // CORS
-  const allowedOrigins =
-    process.env.FRONTEND_URL?.split(',').map((url) => url.trim()) ?? [];
+  const apiPrefix = configService.get('apiPrefix', { infer: true });
+  const frontendOrigin = configService.get('frontendOrigin', { infer: true });
+  const port = configService.get('port', { infer: true });
+
+  app.setGlobalPrefix(apiPrefix);
+
+  app.use(helmet());
+  app.use(cookieParser());
+  app.use(createMorganMiddleware(createWinstonLogger(configService)));
 
   app.enableCors({
-    origin: allowedOrigins,
+    origin: frontendOrigin,
     credentials: true,
   });
 
-  // DTO validation
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
+      forbidNonWhitelisted: true,
       transform: true,
     }),
   );
 
-  //global error handler
-
-  app.useGlobalFilters(new GlobalFilter());
-
-  // graceful shutdown
   app.enableShutdownHooks();
 
-  const port = process.env.PORT ?? 3000;
-
   await app.listen(port);
-
-  console.log(`Server is running on http://localhost:${port}`);
+  winstonLogger.log(`Server running on http://localhost:${port}/${apiPrefix}`);
 }
+
 void bootstrap();
