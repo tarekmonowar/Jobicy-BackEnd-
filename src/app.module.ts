@@ -1,10 +1,13 @@
-// Root module — wires global config, logging, Prisma, and Redis.
+// Root module — wires global config, logging, Prisma, Redis, auth, and guards.
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { WinstonModule } from 'nest-winston';
 import { ALIAS_CHECK } from '@/alias-check';
+import { AuthModule } from '@/auth/auth.module';
 import { GlobalExceptionFilter } from '@/common/filters/global-exception.filter';
+import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
+import { RolesGuard } from '@/common/guards/roles.guard';
 import { LoggingInterceptor } from '@/common/interceptors/logging.interceptor';
 import { TransformInterceptor } from '@/common/interceptors/transform.interceptor';
 import configuration from '@/config/configuration';
@@ -26,12 +29,15 @@ void ALIAS_CHECK;
     WinstonModule.forRootAsync(winstonModuleOptions),
     PrismaModule,
     RedisModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}
